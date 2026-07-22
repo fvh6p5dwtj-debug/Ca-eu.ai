@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-bg-deep: #0a0a1a;
+  --color-bg-card: #141426;
+  --color-bg-card-hover: #1c1c38;
+  --color-purple-primary: #9333ea;
+  --color-magenta-primary: #d946ef;
+  --color-purple-light: #a855f7;
+  --color-magenta-light: #e879f9;
+  --color-purple-dark: #6b21a8;
+  --color-magenta-dark: #be185d;
+  --color-accent-pink: #ec4899;
+  --color-text-primary: #f5f3ff;
+  --color-text-secondary: #c4b5fd;
+  --color-text-muted: #8b7faa;
+  --color-border-subtle: rgba(147, 51, 234, 0.2);
+  --color-glow-purple: rgba(147, 51, 234, 0.4);
+  --color-glow-magenta: rgba(217, 70, 239, 0.4);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-purple-primary) rgba(10, 10, 26, 0.5);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(10, 10, 26, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-purple-primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-magenta-primary);
+}
+
+body {
+  background: linear-gradient(180deg, #0a0a1a 0%, #1a0a2e 50%, #0a0a1a 100%);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--color-purple-light), var(--color-magenta-primary), var(--color-accent-pink));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.card-glow {
+  border: 1px solid rgba(147, 51, 234, 0.15);
+  transition: all 0.3s ease;
+}
+
+.card-glow:hover {
+  border-color: rgba(217, 70, 239, 0.4);
+  box-shadow: 0 0 30px rgba(147, 51, 234, 0.15), 0 0 60px rgba(217, 70, 239, 0.08);
+  background-color: var(--color-bg-card-hover);
+}
+
+.btn-gradient {
+  background: linear-gradient(135deg, var(--color-purple-primary), var(--color-magenta-primary));
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(147, 51, 234, 0.3);
+}
+
+.btn-gradient:hover {
+  background: linear-gradient(135deg, var(--color-purple-light), var(--color-magenta-light));
+  box-shadow: 0 6px 30px rgba(217, 70, 239, 0.4);
+  transform: translateY(-2px);
+}
+
+.btn-outline {
+  border: 1px solid rgba(147, 51, 234, 0.4);
+  transition: all 0.3s ease;
+}
+
+.btn-outline:hover {
+  border-color: var(--color-magenta-primary);
+  background: rgba(147, 51, 234, 0.1);
+  box-shadow: 0 0 20px rgba(147, 51, 234, 0.2);
+}
+
+.floating {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px var(--color-glow-purple); }
+  50% { box-shadow: 0 0 20px var(--color-glow-magenta), 0 0 40px rgba(217, 70, 239, 0.2); }
+}
+
+.online-indicator {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(20, 20, 38, 0.9), rgba(28, 28, 56, 0.7));
+  backdrop-filter: blur(10px);
+}
+
+.bg-mesh {
+  background-image:
+    radial-gradient(circle at 20% 40%, rgba(147, 51, 234, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 60%, rgba(217, 70, 239, 0.06) 0%, transparent 50%),
+    radial-gradient(circle at 50% 80%, rgba(236, 72, 153, 0.04) 0%, transparent 50%);
+}
+
+.pricing-card-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.pricing-card-glow::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(135deg, var(--color-purple-primary), var(--color-magenta-primary), var(--color-accent-pink));
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.pricing-card-glow:hover::before {
+  opacity: 0.6;
+}
+
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
