@@ -156,8 +156,6 @@ export function verifyPassword(passwordOrEmail: string, hashOrPassword?: string)
   return bcrypt.compareSync(hashOrPassword, user.password);
 }
 
-export { getUserByEmail as findUserByEmail };
-
 export async function initDatabase() {
   await getDb();
 }

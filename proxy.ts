@@ -1,20 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Cookie names that indicate a signed-in session. The app's own login flow
-// (app/api/auth/login) sets `token`; NextAuth, if used, sets its session cookie.
-const SESSION_COOKIES = [
-  'token',
-  'next-auth.session-token',
-  '__Secure-next-auth.session-token',
-];
-
 // Optimistic auth check only: Proxy runs on every matched (and prefetched)
-// request, so it just verifies a session cookie is present and never touches
-// the database. Full validation stays in the API routes (e.g. /api/auth/me),
-// which look the token up via getUserByToken.
+// request, so it just verifies the session cookie is present and never touches
+// the database. The `token` cookie is set by app/api/auth/login; full
+// validation stays in the API routes (e.g. /api/auth/me) via getUserByToken.
 export function proxy(req: NextRequest) {
-  const hasSession = SESSION_COOKIES.some((name) => req.cookies.has(name));
+  const hasSession = req.cookies.has('token');
 
   if (!hasSession) {
     const signInUrl = new URL('/auth/signin', req.url);
