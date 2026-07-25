@@ -71,48 +71,23 @@ function saveDb() {
   fs.writeFileSync(dbPath, buffer);
 }
 
-export async function createUser(nameOrData: string | { name: string; email: string; password?: string; image?: string; provider?: string }, email?: string, password?: string) {
+export async function createUser(name: string, email: string, password: string) {
   const database = await getDb();
-  let name: string, userEmail: string, userPassword: string, userImage: string | undefined;
-  if (typeof nameOrData === 'object') {
-    name = nameOrData.name;
-    userEmail = nameOrData.email;
-    userPassword = nameOrData.password || Math.random().toString(36).substring(2);
-    userImage = nameOrData.image;
-  } else {
-    name = nameOrData;
-    userEmail = email!;
-    userPassword = password!;
-  }
-
-  const hashedPassword = bcrypt.hashSync(userPassword, 10);
+  const hashedPassword = bcrypt.hashSync(password, 10);
   const stmt = database.prepare('INSERT INTO users (name, email, password) VALUES (?, ?, ?)');
-  stmt.run([name, userEmail, hashedPassword]);
+  stmt.run([name, email, hashedPassword]);
   stmt.free();
 
   const idResult = database.exec('SELECT last_insert_rowid() as id');
   const id = idResult[0]?.values[0]?.[0] as number;
   saveDb();
-  return { id, name, email: userEmail, plan: 'free', image: userImage };
+  return { id, name, email, plan: 'free' };
 }
 
 export async function getUserByEmail(email: string) {
   const database = await getDb();
   const stmt = database.prepare('SELECT * FROM users WHERE email = ?');
   stmt.bind([email]);
-  if (stmt.step()) {
-    const row = stmt.getAsObject();
-    stmt.free();
-    return row as any;
-  }
-  stmt.free();
-  return null;
-}
-
-export async function getUserById(id: number) {
-  const database = await getDb();
-  const stmt = database.prepare('SELECT id, name, email, plan, created_at FROM users WHERE id = ?');
-  stmt.bind([id]);
   if (stmt.step()) {
     const row = stmt.getAsObject();
     stmt.free();
