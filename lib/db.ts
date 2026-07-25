@@ -1,44 +1,40 @@
-import initSqlJs, { Database } from 'sql.js';
+import { createClient, type Client } from '@libsql/client';
 import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 
-const dbPath = path.join(process.cwd(), 'data', 'candyai.db');
-
-const dataDir = path.dirname(dbPath);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+// Database backend, in order of preference:
+// 1. Turso / remote libSQL when TURSO_DATABASE_URL is set (persistent — use in
+//    production; serverless filesystems don't keep local files).
+// 2. A local SQLite file otherwise: ./data/candyai.db in dev, /tmp on Vercel
+//    (the only writable path there; per-instance and ephemeral, demo only).
+function resolveDbUrl(): string {
+  if (process.env.TURSO_DATABASE_URL) return process.env.TURSO_DATABASE_URL;
+  if (process.env.VERCEL) return 'file:/tmp/candyai.db';
+  const dbPath = path.join(process.cwd(), 'data', 'candyai.db');
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  return `file:${dbPath}`;
 }
 
-let db: Database | null = null;
-let dbPromise: Promise<Database> | null = null;
+let dbPromise: Promise<Client> | null = null;
 
-// Initialization is async (sql.js loads wasm), so every query must await it.
-// getDb() memoizes a single in-flight promise: concurrent first calls share
-// one init instead of racing to create two databases, and callers can never
-// observe a null db.
-function getDb(): Promise<Database> {
+// Schema init is async, so every query must await it. getDb() memoizes a
+// single in-flight promise: concurrent first calls share one init instead of
+// racing, and callers can never observe an uninitialized database.
+function getDb(): Promise<Client> {
   if (!dbPromise) {
     dbPromise = initDb();
   }
   return dbPromise;
 }
 
-async function initDb(): Promise<Database> {
-  // Load the wasm binary directly instead of letting sql.js resolve its own
-  // path: under Next.js/Turbopack server bundling initSqlJs() resolves a bogus
-  // base (/ROOT/node_modules/...) and fails with ENOENT.
-  const SQL = await initSqlJs({
-    wasmBinary: fs.readFileSync(
-      path.join(process.cwd(), 'node_modules/sql.js/dist/sql-wasm.wasm')
-    ),
+async function initDb(): Promise<Client> {
+  const client = createClient({
+    url: resolveDbUrl(),
+    authToken: process.env.TURSO_AUTH_TOKEN,
   });
 
-  const database = fs.existsSync(dbPath)
-    ? new SQL.Database(fs.readFileSync(dbPath))
-    : new SQL.Database();
-
-  database.run(`
+  await client.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -49,7 +45,7 @@ async function initDb(): Promise<Database> {
     )
   `);
 
-  database.run(`
+  await client.execute(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL,
@@ -59,80 +55,61 @@ async function initDb(): Promise<Database> {
     )
   `);
 
-  db = database;
-  saveDb();
-  return database;
-}
-
-function saveDb() {
-  if (!db) return;
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(dbPath, buffer);
+  return client;
 }
 
 export async function createUser(name: string, email: string, password: string) {
-  const database = await getDb();
+  const db = await getDb();
   const hashedPassword = bcrypt.hashSync(password, 10);
-  const stmt = database.prepare('INSERT INTO users (name, email, password) VALUES (?, ?, ?)');
-  stmt.run([name, email, hashedPassword]);
-  stmt.free();
-
-  const idResult = database.exec('SELECT last_insert_rowid() as id');
-  const id = idResult[0]?.values[0]?.[0] as number;
-  saveDb();
+  const result = await db.execute({
+    sql: 'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
+    args: [name, email, hashedPassword],
+  });
+  const id = Number(result.lastInsertRowid);
   return { id, name, email, plan: 'free' };
 }
 
 export async function getUserByEmail(email: string) {
-  const database = await getDb();
-  const stmt = database.prepare('SELECT * FROM users WHERE email = ?');
-  stmt.bind([email]);
-  if (stmt.step()) {
-    const row = stmt.getAsObject();
-    stmt.free();
-    return row as any;
-  }
-  stmt.free();
-  return null;
+  const db = await getDb();
+  const result = await db.execute({
+    sql: 'SELECT * FROM users WHERE email = ?',
+    args: [email],
+  });
+  return (result.rows[0] as any) ?? null;
 }
 
 export async function createSession(userId: number) {
-  const database = await getDb();
+  const db = await getDb();
   const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
   const sessionId = Math.random().toString(36).substring(2);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  const stmt = database.prepare('INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)');
-  stmt.run([sessionId, userId, token, expiresAt]);
-  stmt.free();
-  saveDb();
+  await db.execute({
+    sql: 'INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)',
+    args: [sessionId, userId, token, expiresAt],
+  });
   return { token, expiresAt };
 }
 
 export async function getUserByToken(token: string) {
-  const database = await getDb();
-  const stmt = database.prepare(`
-    SELECT u.id, u.name, u.email, u.plan, u.created_at
-    FROM users u
-    JOIN sessions s ON u.id = s.user_id
-    WHERE s.token = ? AND s.expires_at > datetime('now')
-  `);
-  stmt.bind([token]);
-  if (stmt.step()) {
-    const row = stmt.getAsObject();
-    stmt.free();
-    return row as any;
-  }
-  stmt.free();
-  return null;
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `
+      SELECT u.id, u.name, u.email, u.plan, u.created_at
+      FROM users u
+      JOIN sessions s ON u.id = s.user_id
+      WHERE s.token = ? AND s.expires_at > datetime('now')
+    `,
+    args: [token],
+  });
+  return (result.rows[0] as any) ?? null;
 }
 
 export async function deleteSession(token: string) {
-  const database = await getDb();
-  const stmt = database.prepare('DELETE FROM sessions WHERE token = ?');
-  stmt.run([token]);
-  stmt.free();
-  saveDb();
+  const db = await getDb();
+  await db.execute({
+    sql: 'DELETE FROM sessions WHERE token = ?',
+    args: [token],
+  });
 }
 
 // Matches a bcrypt hash: "$2a$"/"$2b$"/"$2y$" + two-digit cost + "$".
@@ -155,5 +132,3 @@ export async function verifyPassword(passwordOrEmail: string, hashOrPassword?: s
 export async function initDatabase() {
   await getDb();
 }
-
-initDatabase();
