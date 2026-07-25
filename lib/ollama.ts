@@ -1,4 +1,8 @@
-const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
+// An OLLAMA_API_KEY points this at Ollama Cloud (ollama.com) instead of a
+// local install: same /api/chat wire format (NDJSON, streaming or not),
+// authenticated with a Bearer token. OLLAMA_HOST always wins if set explicitly.
+const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY;
+const OLLAMA_HOST = process.env.OLLAMA_HOST || (OLLAMA_API_KEY ? 'https://ollama.com' : 'http://localhost:11434');
 const USE_CPU = process.env.OLLAMA_USE_CPU === 'true';
 
 export interface OllamaMessage {
@@ -13,7 +17,10 @@ export async function ollamaChat(
 ) {
   const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(OLLAMA_API_KEY ? { Authorization: `Bearer ${OLLAMA_API_KEY}` } : {}),
+    },
     body: JSON.stringify({
       model,
       messages,
@@ -40,10 +47,19 @@ export async function ollamaChat(
 }
 
 export async function listModels() {
-  const res = await fetch(`${OLLAMA_HOST}/api/tags`);
+  const res = await fetch(`${OLLAMA_HOST}/api/tags`, {
+    headers: OLLAMA_API_KEY ? { Authorization: `Bearer ${OLLAMA_API_KEY}` } : {},
+  });
   if (!res.ok) return [];
   const data = await res.json();
   return data.models?.map((m: any) => m.name) ?? [];
 }
 
-export const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'candyai-companion';
+// candyai-companion is a locally built custom model for a local install;
+// Ollama Cloud doesn't have it, so default to a real cloud model instead
+// whenever OLLAMA_API_KEY is set and OLLAMA_MODEL isn't given explicitly.
+export const DEFAULT_MODEL = process.env.OLLAMA_MODEL || (OLLAMA_API_KEY ? 'gpt-oss:20b' : 'candyai-companion');
+
+export function hasOllamaCloudKey(): boolean {
+  return Boolean(OLLAMA_API_KEY);
+}
