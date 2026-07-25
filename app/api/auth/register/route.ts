@@ -17,13 +17,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
     }
 
-    const existing = getUserByEmail(email);
+    const existing = await getUserByEmail(email);
     if (existing) {
       return NextResponse.json({ error: 'Email already exists' }, { status: 409 });
     }
 
-    const user = createUser(name, email, password);
-    const session = createSession(user.id);
+    const user = await createUser(name, email, password);
+    const session = await createSession(user.id);
 
     const response = NextResponse.json({ user, token: session.token }, { status: 201 });
     response.headers.set(

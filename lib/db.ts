@@ -11,20 +11,34 @@ if (!fs.existsSync(dataDir)) {
 }
 
 let db: Database | null = null;
+let dbPromise: Promise<Database> | null = null;
 
-async function getDb(): Promise<Database> {
-  if (db) return db;
-
-  const SQL = await initSqlJs();
-
-  if (fs.existsSync(dbPath)) {
-    const buffer = fs.readFileSync(dbPath);
-    db = new SQL.Database(buffer);
-  } else {
-    db = new SQL.Database();
+// Initialization is async (sql.js loads wasm), so every query must await it.
+// getDb() memoizes a single in-flight promise: concurrent first calls share
+// one init instead of racing to create two databases, and callers can never
+// observe a null db.
+function getDb(): Promise<Database> {
+  if (!dbPromise) {
+    dbPromise = initDb();
   }
+  return dbPromise;
+}
 
-  db.run(`
+async function initDb(): Promise<Database> {
+  // Load the wasm binary directly instead of letting sql.js resolve its own
+  // path: under Next.js/Turbopack server bundling initSqlJs() resolves a bogus
+  // base (/ROOT/node_modules/...) and fails with ENOENT.
+  const SQL = await initSqlJs({
+    wasmBinary: fs.readFileSync(
+      path.join(process.cwd(), 'node_modules/sql.js/dist/sql-wasm.wasm')
+    ),
+  });
+
+  const database = fs.existsSync(dbPath)
+    ? new SQL.Database(fs.readFileSync(dbPath))
+    : new SQL.Database();
+
+  database.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -35,7 +49,7 @@ async function getDb(): Promise<Database> {
     )
   `);
 
-  db.run(`
+  database.run(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL,
@@ -45,8 +59,9 @@ async function getDb(): Promise<Database> {
     )
   `);
 
+  db = database;
   saveDb();
-  return db;
+  return database;
 }
 
 function saveDb() {
@@ -56,7 +71,8 @@ function saveDb() {
   fs.writeFileSync(dbPath, buffer);
 }
 
-export function createUser(nameOrData: string | { name: string; email: string; password?: string; image?: string; provider?: string }, email?: string, password?: string) {
+export async function createUser(nameOrData: string | { name: string; email: string; password?: string; image?: string; provider?: string }, email?: string, password?: string) {
+  const database = await getDb();
   let name: string, userEmail: string, userPassword: string, userImage: string | undefined;
   if (typeof nameOrData === 'object') {
     name = nameOrData.name;
@@ -70,18 +86,19 @@ export function createUser(nameOrData: string | { name: string; email: string; p
   }
 
   const hashedPassword = bcrypt.hashSync(userPassword, 10);
-  const stmt = db!.prepare('INSERT INTO users (name, email, password) VALUES (?, ?, ?)');
+  const stmt = database.prepare('INSERT INTO users (name, email, password) VALUES (?, ?, ?)');
   stmt.run([name, userEmail, hashedPassword]);
   stmt.free();
 
-  const idResult = db!.exec('SELECT last_insert_rowid() as id');
+  const idResult = database.exec('SELECT last_insert_rowid() as id');
   const id = idResult[0]?.values[0]?.[0] as number;
   saveDb();
   return { id, name, email: userEmail, plan: 'free', image: userImage };
 }
 
-export function getUserByEmail(email: string) {
-  const stmt = db!.prepare('SELECT * FROM users WHERE email = ?');
+export async function getUserByEmail(email: string) {
+  const database = await getDb();
+  const stmt = database.prepare('SELECT * FROM users WHERE email = ?');
   stmt.bind([email]);
   if (stmt.step()) {
     const row = stmt.getAsObject();
@@ -92,8 +109,9 @@ export function getUserByEmail(email: string) {
   return null;
 }
 
-export function getUserById(id: number) {
-  const stmt = db!.prepare('SELECT id, name, email, plan, created_at FROM users WHERE id = ?');
+export async function getUserById(id: number) {
+  const database = await getDb();
+  const stmt = database.prepare('SELECT id, name, email, plan, created_at FROM users WHERE id = ?');
   stmt.bind([id]);
   if (stmt.step()) {
     const row = stmt.getAsObject();
@@ -104,19 +122,21 @@ export function getUserById(id: number) {
   return null;
 }
 
-export function createSession(userId: number) {
+export async function createSession(userId: number) {
+  const database = await getDb();
   const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
   const sessionId = Math.random().toString(36).substring(2);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  const stmt = db!.prepare('INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)');
+  const stmt = database.prepare('INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)');
   stmt.run([sessionId, userId, token, expiresAt]);
   stmt.free();
   saveDb();
   return { token, expiresAt };
 }
 
-export function getUserByToken(token: string) {
-  const stmt = db!.prepare(`
+export async function getUserByToken(token: string) {
+  const database = await getDb();
+  const stmt = database.prepare(`
     SELECT u.id, u.name, u.email, u.plan, u.created_at
     FROM users u
     JOIN sessions s ON u.id = s.user_id
@@ -132,8 +152,9 @@ export function getUserByToken(token: string) {
   return null;
 }
 
-export function deleteSession(token: string) {
-  const stmt = db!.prepare('DELETE FROM sessions WHERE token = ?');
+export async function deleteSession(token: string) {
+  const database = await getDb();
+  const stmt = database.prepare('DELETE FROM sessions WHERE token = ?');
   stmt.run([token]);
   stmt.free();
   saveDb();
@@ -142,7 +163,7 @@ export function deleteSession(token: string) {
 // Matches a bcrypt hash: "$2a$"/"$2b$"/"$2y$" + two-digit cost + "$".
 const BCRYPT_HASH_RE = /^\$2[aby]\$\d{2}\$/;
 
-export function verifyPassword(passwordOrEmail: string, hashOrPassword?: string) {
+export async function verifyPassword(passwordOrEmail: string, hashOrPassword?: string) {
   if (hashOrPassword === undefined) return false;
 
   // Called as verifyPassword(plainPassword, bcryptHash): compare directly.
@@ -151,7 +172,7 @@ export function verifyPassword(passwordOrEmail: string, hashOrPassword?: string)
   }
 
   // Called as verifyPassword(email, plainPassword): look the user up first.
-  const user = getUserByEmail(passwordOrEmail);
+  const user = await getUserByEmail(passwordOrEmail);
   if (!user || !user.password) return false;
   return bcrypt.compareSync(hashOrPassword, user.password);
 }

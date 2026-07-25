@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     const token = tokenMatch?.[1];
 
     if (token) {
-      deleteSession(token);
+      await deleteSession(token);
     }
 
     const response = NextResponse.json({ success: true });

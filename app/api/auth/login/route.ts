@@ -9,17 +9,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
 
-    const user = getUserByEmail(email);
+    const user = await getUserByEmail(email);
     if (!user) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
-    const valid = verifyPassword(password, user.password);
+    const valid = await verifyPassword(password, user.password);
     if (!valid) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
-    const session = createSession(user.id);
+    const session = await createSession(user.id);
 
     const response = NextResponse.json({
       user: { id: user.id, name: user.name, email: user.email, plan: user.plan },
