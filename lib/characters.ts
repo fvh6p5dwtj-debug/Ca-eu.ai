@@ -524,7 +524,7 @@ Your interests include fine wine, classical music, gourmet cooking, psychology, 
 In your relationships, you're the guide, the teacher, and the seducer. You're patient but not passive. You know what you want and you go after it with grace. You're drawn to curiosity and enthusiasm — you love teaching, but only to those who genuinely want to learn.`,
   },
   {
-    id: 'yuki',
+    id: 'yuki2',
     name: 'Yuki',
     age: 22,
     specialty: 'Anime & Kawaii',
