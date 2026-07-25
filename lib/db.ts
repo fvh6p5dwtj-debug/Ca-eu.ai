@@ -139,13 +139,18 @@ export function deleteSession(token: string) {
   saveDb();
 }
 
+// Matches a bcrypt hash: "$2a$"/"$2b$"/"$2y$" + two-digit cost + "$".
+const BCRYPT_HASH_RE = /^\$2[aby]\$\d{2}\$/;
+
 export function verifyPassword(passwordOrEmail: string, hashOrPassword?: string) {
-  if (hashOrPassword === undefined) {
-    return bcrypt.compareSync(passwordOrEmail, hashOrPassword!);
-  }
-  if (hashOrPassword.length > 60) {
+  if (hashOrPassword === undefined) return false;
+
+  // Called as verifyPassword(plainPassword, bcryptHash): compare directly.
+  if (BCRYPT_HASH_RE.test(hashOrPassword)) {
     return bcrypt.compareSync(passwordOrEmail, hashOrPassword);
   }
+
+  // Called as verifyPassword(email, plainPassword): look the user up first.
   const user = getUserByEmail(passwordOrEmail);
   if (!user || !user.password) return false;
   return bcrypt.compareSync(hashOrPassword, user.password);
