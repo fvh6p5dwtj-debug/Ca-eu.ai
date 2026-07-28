@@ -473,8 +473,10 @@ export default function ChatInterface({ character }: { character: Character }) {
   );
 }
 
-function getStarters(characterId: string): string[] {
-  const starters: Record<string, string[]> = {
+// Exported so tests can assert every character in lib/characters.ts has an
+// entry. A missing one is invisible at runtime — it silently falls back to the
+// generic starter below, which is exactly how `yuki2` lost its starters.
+export const STARTERS: Record<string, string[]> = {
     sophia: [
       'What is your idea of a perfect date?',
       'Tell me about your favorite love story',
@@ -666,6 +668,8 @@ function getStarters(characterId: string): string[] {
       'Tell me your doubts',
       'What does your heart really want?',
     ],
-  };
-  return starters[characterId] ?? ['Hey! Tell me about yourself'];
+};
+
+function getStarters(characterId: string): string[] {
+  return STARTERS[characterId] ?? ['Hey! Tell me about yourself'];
 }
