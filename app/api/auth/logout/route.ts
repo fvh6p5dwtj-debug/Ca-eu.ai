@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { deleteSession } from '@/lib/db';
+import { getSessionToken } from '@/lib/auth';
 
-export async function POST(request: Request) {
+export async function POST() {
   try {
-    const cookieHeader = request.headers.get('cookie') || '';
-    const tokenMatch = cookieHeader.match(/token=([^;]+)/);
-    const token = tokenMatch?.[1];
+    const token = await getSessionToken();
 
     if (token) {
       await deleteSession(token);

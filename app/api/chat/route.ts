@@ -2,8 +2,25 @@ import { NextResponse } from 'next/server';
 import { ollamaChat, DEFAULT_MODEL } from '@/lib/ollama';
 import { openrouterChat, DEFAULT_OPENROUTER_MODEL, hasOpenRouterKeys } from '@/lib/openrouter';
 import { characters } from '@/lib/characters';
+import { getSessionUser } from '@/lib/auth';
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+// Every generation costs real money against our upstream API keys, so cap how
+// fast one account can spend them. This lives in memory, which on serverless
+// means per-instance and reset on cold start — a brake on runaway clients, not
+// a real quota. Enforcing an actual budget needs shared state (Turso, KV).
+const RATE_LIMIT = 20;
+const RATE_WINDOW_MS = 60_000;
+const recentRequests = new Map<number, number[]>();
+
+function isRateLimited(userId: number): boolean {
+  const now = Date.now();
+  const hits = (recentRequests.get(userId) ?? []).filter(t => now - t < RATE_WINDOW_MS);
+  hits.push(now);
+  recentRequests.set(userId, hits);
+  return hits.length > RATE_LIMIT;
+}
 
 // Strips <think>...</think> reasoning blocks (emitted by some models) from a
 // stream of plain content chunks and encodes the rest to bytes.
@@ -97,6 +114,15 @@ function parseSSEStream(): TransformStream<Uint8Array, string> {
 
 export async function POST(req: Request) {
   try {
+    const user = await getSessionUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
+    if (isRateLimited(user.id)) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+
     const { messages, characterId } = await req.json();
 
     const character = characters.find(c => c.id === characterId);

@@ -1,19 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getUserByToken } from '@/lib/db';
+import { getSessionUser } from '@/lib/auth';
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const cookieHeader = request.headers.get('cookie') || '';
-    const tokenMatch = cookieHeader.match(/token=([^;]+)/);
-    const token = tokenMatch?.[1];
-
-    if (!token) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-
-    const user = await getUserByToken(token);
+    const user = await getSessionUser();
     if (!user) {
-      return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 });
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
     return NextResponse.json({ user });
