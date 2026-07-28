@@ -494,6 +494,46 @@ function getStarters(characterId: string): string[] {
       "What's the best business advice you've gotten?",
       'How do you stay so motivated?',
     ],
+    cipher: [
+      "What's the wildest vulnerability you've ever found?",
+      'How would you break into my app?',
+      'Walk me through your last CTF',
+    ],
+    nexus: [
+      "What can MCP do that a plain REST API can't?",
+      'Help me connect an agent to my database',
+      "What's the worst AI integration you've seen?",
+    ],
+    oracle: [
+      'My codebase is a mess — where do I even start?',
+      "What does a knowledge graph give me that grep doesn't?",
+      'Map out how a big system actually fits together',
+    ],
+    forge: [
+      "What's slowing my dev loop down?",
+      'Build me a workflow that saves an hour a day',
+      'What makes an AI agent actually useful?',
+    ],
+    vector: [
+      'Why does my RAG keep returning junk?',
+      'Explain embeddings like I have never seen one',
+      'How should I be chunking my documents?',
+    ],
+    volts: [
+      'My deploy keeps falling over — help',
+      'Do I actually need Kubernetes?',
+      "What's your best scaling horror story?",
+    ],
+    satoshi: [
+      'Explain Lightning to me like I am brand new',
+      "What makes money 'sound'?",
+      'Is Bitcoin actually useful day to day?',
+    ],
+    pixie: [
+      'My Docker image is 2GB. Fix it.',
+      'Write me a Dockerfile for this project',
+      'Why does it work locally but not in the container?',
+    ],
     catalina: [
       'Take me on an adventure',
       "What's the most spontaneous thing you've done?",
@@ -518,6 +558,47 @@ function getStarters(characterId: string): string[] {
       'Konnichiwa Yuki! Tell me about yourself',
       'What anime should I watch?',
       'Show me something kawaii!',
+    ],
+    // Same persona space as `yuki` above — keep these two distinct on purpose.
+    yuki2: [
+      "What's Tokyo actually like to live in?",
+      "Recommend me an anime I've never heard of",
+      'Teach me a Japanese phrase',
+    ],
+    kaito: [
+      'What should I play next?',
+      'Settle it for me: PC or console?',
+      'Tell me about the greatest esports moment ever',
+    ],
+    miko: [
+      "I've had a rough day",
+      'Say something to cheer me up',
+      'Tell me the best part of your day',
+    ],
+    ryu: [
+      'I keep skipping the gym — motivate me',
+      'Teach me a martial arts move',
+      'What does your training week look like?',
+    ],
+    'luna-witch': [
+      'Pull a card for me',
+      'What does my star sign say about me?',
+      'Tell me something the universe wants me to hear',
+    ],
+    jaxon: [
+      'Make me a beat',
+      'Why does my mix sound muddy?',
+      "What's the best-produced album ever made?",
+    ],
+    sage: [
+      "I don't know what I'm doing with my life",
+      'How do I stop overthinking everything?',
+      "What's one habit actually worth building?",
+    ],
+    marcus: [
+      "Read me — what's my deal?",
+      'Give me your best comeback',
+      "What's the smartest hustle you've ever seen?",
     ],
     'sofia-c': [
       'How can I make you happy today?',
