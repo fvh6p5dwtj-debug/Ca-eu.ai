@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, Sparkles, ImageIcon } from 'lucide-react';
+import { ArrowLeft, Send, Sparkles, ImageIcon, Square } from 'lucide-react';
 import type { Character } from '@/lib/characters';
 
 interface ChatMessage {
@@ -11,6 +11,10 @@ interface ChatMessage {
   content: string;
   imageUrl?: string;
   prompt?: string;
+  // Set while an image is being generated for this message. A flag rather than
+  // a comparison against the placeholder text: the two drifted apart once
+  // already and the spinner silently stopped rendering.
+  awaitingImage?: boolean;
 }
 
 export default function ChatInterface({ character }: { character: Character }) {
@@ -21,7 +25,7 @@ export default function ChatInterface({ character }: { character: Character }) {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -92,7 +96,18 @@ export default function ChatInterface({ character }: { character: Character }) {
         );
       }
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        // Keep whatever streamed in before the stop. If nothing did, the bubble
+        // would otherwise sit on "Thinking..." forever, since isLoading clears.
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId && m.content === ''
+              ? { ...m, content: '⏹ Stopped' }
+              : m
+          )
+        );
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : 'Something went wrong';
       setMessages((prev) =>
         prev.map((m) =>
@@ -105,6 +120,10 @@ export default function ChatInterface({ character }: { character: Character }) {
       setIsLoading(false);
       abortRef.current = null;
     }
+  };
+
+  const stopGenerating = () => {
+    abortRef.current?.abort();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -131,6 +150,7 @@ export default function ChatInterface({ character }: { character: Character }) {
       id: imageId,
       role: 'assistant',
       content: 'Let me send you a photo... 📸',
+      awaitingImage: true,
     };
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
@@ -151,7 +171,7 @@ export default function ChatInterface({ character }: { character: Character }) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === imageId
-              ? { ...m, content: caption, imageUrl: data.url, prompt: imagePrompt }
+              ? { ...m, content: caption, imageUrl: data.url, prompt: imagePrompt, awaitingImage: false }
               : m
           )
         );
@@ -159,7 +179,7 @@ export default function ChatInterface({ character }: { character: Character }) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === imageId
-              ? { ...m, content: `⚠️ ${data.error || 'Image generation failed'}` }
+              ? { ...m, content: `⚠️ ${data.error || 'Image generation failed'}`, awaitingImage: false }
               : m
           )
         );
@@ -168,7 +188,7 @@ export default function ChatInterface({ character }: { character: Character }) {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === imageId
-            ? { ...m, content: '⚠️ Failed to generate image. Make sure ComfyUI is running.' }
+            ? { ...m, content: '⚠️ Failed to generate image. Make sure ComfyUI is running.', awaitingImage: false }
             : m
         )
       );
@@ -338,7 +358,7 @@ export default function ChatInterface({ character }: { character: Character }) {
                     <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
                     <span className="text-sm text-purple-400">Thinking...</span>
                   </div>
-                ) : msg.content === 'Generating your image...' ? (
+                ) : msg.awaitingImage ? (
                   <div className="flex flex-col items-center gap-2 py-2">
                     <div className="w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
                     <span className="text-sm text-purple-400 animate-pulse">Generating your image...</span>
@@ -371,16 +391,21 @@ export default function ChatInterface({ character }: { character: Character }) {
         {/* Input area */}
         <div className="flex-shrink-0 px-4 py-4 border-t border-purple-500/20 bg-[#0a0a1a]/80 backdrop-blur-sm">
           <div className="flex items-center gap-3 max-w-4xl mx-auto">
-            <input
+            <textarea
               ref={inputRef}
-              type="text"
+              rows={1}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Grow with the content up to a cap, then scroll internally.
+                e.target.style.height = 'auto';
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+              }}
               onKeyDown={handleKeyDown}
               placeholder={`Message ${character.name}...`}
               disabled={isLoading || isGeneratingImage}
               className="
-                flex-1 px-4 py-3 rounded-xl
+                flex-1 px-4 py-3 rounded-xl resize-none
                 bg-[#1a0a2e] border border-purple-500/20
                 text-white placeholder-gray-500
                 focus:outline-none focus:border-purple-500/50
@@ -409,22 +434,38 @@ export default function ChatInterface({ character }: { character: Character }) {
                 <ImageIcon className="w-5 h-5" />
               )}
             </button>
-            <button
-              onClick={sendMessage}
-              disabled={!input.trim() || isLoading || isGeneratingImage}
-              className="
-                p-3 rounded-xl
-                bg-gradient-to-r from-purple-500 to-fuchsia-500
-                text-white
-                hover:from-purple-400 hover:to-fuchsia-400
-                shadow-lg shadow-purple-500/20
-                disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:from-purple-500 disabled:hover:to-fuchsia-500
-                transition-all duration-200
-                flex-shrink-0
-              "
-            >
-              <Send className="w-5 h-5" />
-            </button>
+            {isLoading ? (
+              <button
+                onClick={stopGenerating}
+                title="Stop generating"
+                className="
+                  p-3 rounded-xl
+                  bg-[#1a0a2e] border border-purple-500/40
+                  text-purple-300 hover:text-fuchsia-400 hover:border-fuchsia-400/50
+                  transition-all duration-200
+                  flex-shrink-0
+                "
+              >
+                <Square className="w-5 h-5 fill-current" />
+              </button>
+            ) : (
+              <button
+                onClick={sendMessage}
+                disabled={!input.trim() || isGeneratingImage}
+                className="
+                  p-3 rounded-xl
+                  bg-gradient-to-r from-purple-500 to-fuchsia-500
+                  text-white
+                  hover:from-purple-400 hover:to-fuchsia-400
+                  shadow-lg shadow-purple-500/20
+                  disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:from-purple-500 disabled:hover:to-fuchsia-500
+                  transition-all duration-200
+                  flex-shrink-0
+                "
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
       </main>
